@@ -5,7 +5,8 @@
 //#include <pcl/point_cloud.h>
 //#include <pcl/point_types.h>
 #include <tf/transform_listener.h>
-#include <map>
+//#include <map>
+#include <unordered_map>
 #include <chrono>
 
 
@@ -13,6 +14,8 @@
 ros::Publisher pub;
 boost::shared_ptr<tf::TransformListener> tf_ptr;
 std::string fixed_frame_for_laser = "odom";  //TODO: Load as a parameter
+std::string time_field_name = "t";
+int expected_number_of_pcl_columns = 1024;
 
 
 void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
@@ -30,28 +33,48 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
     // Iterators over the pointcloud2 message
     // TODO: Check that there actually is a "t" in the message!!! (try/catch)
-    sensor_msgs::PointCloud2Iterator<uint32_t> iter_t(output, "t");
-    sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");    // xyz are consecutive, y~iter_xzy[1], z~[2]
+    sensor_msgs::PointCloud2Iterator<uint32_t> iter_t(output, time_field_name);
 
     // Dictionary to store transforms already looked up
-    std::map<uint32_t, tf::StampedTransform> tfs_cache;
+    std::unordered_map<uint32_t, tf::StampedTransform> tfs_cache;
+    tfs_cache.reserve(expected_number_of_pcl_columns);
 
+    uint32_t latest_time = 0;
 
-    // iterate over the pointcloud
+    // Find the latest time
+    for (; iter_t != iter_t.end(); ++iter_t)
+    {
+        if(*iter_t>latest_time) latest_time=*iter_t;
+    }
+
+    //wait for the latest transform
+    ros::Time last_laser_beam_time = output.header.stamp + ros::Duration(0, latest_time);
+    try{
+        tf_ptr->waitForTransform (output.header.frame_id,
+                                  output.header.stamp,
+                                  output.header.frame_id,
+                                  last_laser_beam_time,
+                                  fixed_frame_for_laser,
+                                  ros::Duration(0.25));
+
+    }
+    catch (tf::TransformException &ex){
+        ROS_ERROR("Pointcloud callback failed because: %s",ex.what());
+        return;
+    }
+
+    //reset the iterators
+    iter_t = sensor_msgs::PointCloud2Iterator<uint32_t>(output, time_field_name);
+    sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");    // xyz are consecutive, y~iter_xzy[1], z~[2]
+
+    // iterate over the pointcloud, lookup tfs and apply them
     for (; iter_t != iter_t.end(); ++iter_t, ++iter_xyz)
     {
         tf::StampedTransform transform;
-
         if(tfs_cache.count(*iter_t) == 0) // we haven't looked for the transform for that time yet
         {
             ros::Time laser_beam_time = output.header.stamp + ros::Duration(0, *iter_t);
             try{
-                tf_ptr->waitForTransform (output.header.frame_id,
-                                          output.header.stamp,
-                                          output.header.frame_id,
-                                          laser_beam_time,
-                                          fixed_frame_for_laser,
-                                          ros::Duration(0.25));
                 tf_ptr->lookupTransform (output.header.frame_id,
                                          output.header.stamp,
                                          output.header.frame_id,
