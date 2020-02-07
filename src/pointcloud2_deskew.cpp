@@ -15,7 +15,8 @@ ros::Publisher pub;
 boost::shared_ptr<tf::TransformListener> tf_ptr;
 std::string fixed_frame_for_laser = "odom";  //TODO: Load as a parameter
 std::string time_field_name = "t";
-int expected_number_of_pcl_columns = 1024;
+int expected_number_of_pcl_columns = 4000;
+int round_to_intervals_of_nanoseconds = 50000;
 
 
 void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
@@ -40,6 +41,7 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     tfs_cache.reserve(expected_number_of_pcl_columns);
 
     uint32_t latest_time = 0;
+    uint32_t current_point_time = 0;
 
     // Find the latest time
     for (; iter_t != iter_t.end(); ++iter_t)
@@ -63,6 +65,8 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
         return;
     }
 
+    auto after_waitForTransform = std::chrono::steady_clock::now();
+
     //reset the iterators
     iter_t = sensor_msgs::PointCloud2Iterator<uint32_t>(output, time_field_name);
     sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");    // xyz are consecutive, y~iter_xzy[1], z~[2]
@@ -70,10 +74,14 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     // iterate over the pointcloud, lookup tfs and apply them
     for (; iter_t != iter_t.end(); ++iter_t, ++iter_xyz)
     {
+
+        current_point_time = (*iter_t/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds;
+        //std::cout << "Exact: " << *iter_t << "ns, rounded: " << current_point_time << "ns." << std::endl;
+
         tf::StampedTransform transform;
-        if(tfs_cache.count(*iter_t) == 0) // we haven't looked for the transform for that time yet
+        if(tfs_cache.count(current_point_time) == 0) // we haven't looked for the transform for that time yet
         {
-            ros::Time laser_beam_time = output.header.stamp + ros::Duration(0, *iter_t);
+            ros::Time laser_beam_time = output.header.stamp + ros::Duration(0, current_point_time);
             try{
                 tf_ptr->lookupTransform (output.header.frame_id,
                                          output.header.stamp,
@@ -87,11 +95,11 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
                 return;
             }
 
-            tfs_cache[*iter_t] = transform;
+            tfs_cache[current_point_time] = transform;
         }
         else // we already have that transform from a previous point
         {
-            transform = tfs_cache[*iter_t];
+            transform = tfs_cache[current_point_time];
         }
 
         //transform the point
@@ -111,7 +119,10 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     std::cout << "... done." << std::endl;
     std::cout << "Elapsed callback time in milliseconds : "
          << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-         << " ms" << std::endl;
+         << " ms. ";
+    std::cout << "Elapsed callback time in waiting for transform: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
+              << " ms." << std::endl;
     std::cout << "Number of tf's fetched: " << tfs_cache.size() << std::endl;
 
 }
@@ -124,13 +135,13 @@ main (int argc, char** argv)
     ros::NodeHandle nh;
 
     // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub = nh.subscribe ("/laser_throttler/points", 20, cloud_callback);  //TODO: Load as a param or change to "input" for later topic renaming
+    ros::Subscriber sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);  //TODO: Load as a param or change to "input" for later topic renaming
 
     // Create a transform listener
     tf_ptr.reset(new tf::TransformListener);
 
     // Create a ROS publisher for the output point cloud
-    pub = nh.advertise<sensor_msgs::PointCloud2> ("output", 20);
+    pub = nh.advertise<sensor_msgs::PointCloud2> ("output_point_cloud", 20);
 
     // Spin
     ros::spin ();
