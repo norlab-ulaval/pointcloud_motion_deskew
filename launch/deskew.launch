@@ -1,7 +1,8 @@
 <launch>
+	<node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" output="screen">
+        <remap from="/input_point_cloud" to="/lslidar_point_cloud" />
+        <remap from="/output_point_cloud" to="/lslidar_point_cloud_deskewed" />
+	</node>
 
-  <node  name="pcl_deskew_node" pkg="pointcloud_motion_deskew" type="pointcloud2_deskew_node" output="screen" >
-    <remap from="input_point_cloud" to="rslidar32_points_stamped" />
-  </node>
-
+	<node pkg="nodelet" type="nodelet" name="pointcloud_motion_deskew" args="load PointCloud2Deskew nodelet_manager" output="screen"/>
 </launch>

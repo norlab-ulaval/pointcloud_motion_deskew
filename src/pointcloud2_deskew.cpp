@@ -1,15 +1,13 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/point_cloud2_iterator.h>
-//#include <pcl_conversions/pcl_conversions.h>
-//#include <pcl/point_cloud.h>
-//#include <pcl/point_types.h>
 #include <tf/transform_listener.h>
-//#include <map>
 #include <unordered_map>
 #include <chrono>
+#include <pluginlib/class_list_macros.h>
+#include "pointcloud_motion_deskew/pointcloud2_deskew.h"
 
-
+PLUGINLIB_EXPORT_CLASS(PointCloud2Deskew, nodelet::Nodelet);
 
 ros::Publisher pub;
 boost::shared_ptr<tf::TransformListener> tf_ptr;
@@ -127,15 +125,12 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
 }
 
-int
-main (int argc, char** argv)
+void PointCloud2Deskew::onInit()
 {
-    // Initialize ROS
-    ros::init (argc, argv, "pointcloud2_deskew");
     ros::NodeHandle nh;
 
     // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);  //TODO: Load as a param or change to "input" for later topic renaming
+    ros::Subscriber sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);
 
     // Create a transform listener
     tf_ptr.reset(new tf::TransformListener);

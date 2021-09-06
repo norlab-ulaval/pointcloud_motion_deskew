@@ -116,14 +116,14 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+ include
   ${catkin_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/pointcloud2_deskew.cpp
-# )
+add_library(${PROJECT_NAME}
+  src/pointcloud2_deskew.cpp
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -134,10 +134,6 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/pointcloud2_deskew_node.cpp)
-
-
-add_executable(pointcloud2_deskew_node src/pointcloud2_deskew.cpp)
-target_link_libraries(pointcloud2_deskew_node ${catkin_LIBRARIES})
 
 
 ## Rename C++ executable without prefix
@@ -151,9 +147,9 @@ target_link_libraries(pointcloud2_deskew_node ${catkin_LIBRARIES})
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+ target_link_libraries(${PROJECT_NAME}
+   ${catkin_LIBRARIES}
+ )
 
 #############
 ## Install ##

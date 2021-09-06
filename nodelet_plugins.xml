@@ -1,0 +1,7 @@
+<library path="lib/libpointcloud_motion_deskew">
+  <class name="PointCloud2Deskew" type="PointCloud2Deskew" base_class_type="nodelet::Nodelet">
+  <description>
+  	De-skewing nodelet.
+  </description>
+  </class>
+</library>
