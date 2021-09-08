@@ -22,7 +22,6 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 {
 
     //Measure callback duration
-    std::cout << "Beginning processing pcl...  ";
     auto start = std::chrono::steady_clock::now();
 
     // Create a container for the data.
@@ -115,15 +114,14 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
 
     auto end = std::chrono::steady_clock::now();
-    std::cout << "... done." << std::endl;
-    std::cout << "Elapsed callback time in milliseconds : "
-         << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-         << " ms. ";
-    std::cout << "Elapsed callback time in waiting for transform: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
-              << " ms." << std::endl;
-    std::cout << "Number of tf's fetched: " << tfs_cache.size() << std::endl;
-
+    const auto cb_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    if (cb_time_ms > 50)
+    {
+      const auto tf_time = std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count();
+      ROS_WARN_STREAM_THROTTLE(1.0, "Elapsed callback time in milliseconds : " << cb_time_ms << " ms. ");
+      ROS_WARN_STREAM_THROTTLE(1.0, "Elapsed callback time in waiting for transform: " << tf_time << " ms.");
+      ROS_WARN_STREAM_THROTTLE(1.0, "Number of tf's fetched: " << tfs_cache.size());
+    }
 }
 
 void PointCloud2Deskew::onInit()
