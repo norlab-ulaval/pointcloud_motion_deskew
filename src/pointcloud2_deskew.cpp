@@ -14,8 +14,10 @@ ros::Subscriber sub;
 boost::shared_ptr<tf::TransformListener> tf_ptr;
 std::string fixed_frame_for_laser = "odom";  //TODO: Load as a parameter
 std::string time_field_name = "t";
-int expected_number_of_pcl_columns = 4000;
-int round_to_intervals_of_nanoseconds = 50000;
+uint32_t expected_number_of_pcl_columns = 4000;
+uint32_t round_to_intervals_of_nanoseconds = 50000;
+double max_scan_duration = 0.5;
+uint32_t max_scan_columns = expected_number_of_pcl_columns;
 
 
 void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
@@ -33,10 +35,6 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     // Iterators over the pointcloud2 message
     // TODO: Check that there actually is a "t" in the message!!! (try/catch)
     sensor_msgs::PointCloud2Iterator<uint32_t> iter_t(output, time_field_name);
-
-    // Dictionary to store transforms already looked up
-    std::unordered_map<uint32_t, tf::StampedTransform> tfs_cache;
-    tfs_cache.reserve(expected_number_of_pcl_columns);
 
     uint32_t latest_time = 0;
     uint32_t current_point_time = 0;
@@ -64,6 +62,21 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     }
 
     auto after_waitForTransform = std::chrono::steady_clock::now();
+
+    // Dictionary to store transforms already looked up
+    std::unordered_map<uint32_t, tf::StampedTransform> tfs_cache;
+    expected_number_of_pcl_columns = latest_time / round_to_intervals_of_nanoseconds;
+    
+    if (expected_number_of_pcl_columns > max_scan_columns)
+    {
+      ROS_ERROR_STREAM("Bad data. Time range of the pointcloud is "
+        << (latest_time * 1e-9) << " s, which is too much (allowed max is "
+        << max_scan_duration << " s). Publishing skewed pointcloud.");
+      pub.publish(input);
+      return;
+    }
+    
+    tfs_cache.reserve(expected_number_of_pcl_columns);
 
     //reset the iterators
     iter_t = sensor_msgs::PointCloud2Iterator<uint32_t>(output, time_field_name);
@@ -127,10 +140,14 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 void PointCloud2Deskew::onInit()
 {
     ros::NodeHandle nh = this->getNodeHandle();
+    ros::NodeHandle pnh = this->getPrivateNodeHandle();
 
     // Create a transform listener
     tf_ptr.reset(new tf::TransformListener);
 
+    max_scan_duration = pnh.param("max_scan_duration", max_scan_duration);
+    max_scan_columns = static_cast<uint32_t>(1e9 * max_scan_duration / round_to_intervals_of_nanoseconds);
+    
     // Create a ROS publisher for the output point cloud
     pub = nh.advertise<sensor_msgs::PointCloud2> ("output_point_cloud", 20);
 
