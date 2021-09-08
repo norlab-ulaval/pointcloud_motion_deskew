@@ -10,6 +10,7 @@
 PLUGINLIB_EXPORT_CLASS(PointCloud2Deskew, nodelet::Nodelet);
 
 ros::Publisher pub;
+ros::Subscriber sub;
 boost::shared_ptr<tf::TransformListener> tf_ptr;
 std::string fixed_frame_for_laser = "odom";  //TODO: Load as a parameter
 std::string time_field_name = "t";
@@ -129,15 +130,12 @@ void PointCloud2Deskew::onInit()
 {
     ros::NodeHandle nh;
 
-    // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);
-
     // Create a transform listener
     tf_ptr.reset(new tf::TransformListener);
 
     // Create a ROS publisher for the output point cloud
     pub = nh.advertise<sensor_msgs::PointCloud2> ("output_point_cloud", 20);
 
-    // Spin
-    ros::spin ();
+    // Create a ROS subscriber for the input point cloud
+    sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);
 }
