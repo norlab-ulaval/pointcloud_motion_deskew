@@ -128,7 +128,7 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
 void PointCloud2Deskew::onInit()
 {
-    ros::NodeHandle nh;
+    ros::NodeHandle nh = this->getNodeHandle();
 
     // Create a transform listener
     tf_ptr.reset(new tf::TransformListener);
