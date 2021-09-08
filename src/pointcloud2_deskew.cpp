@@ -19,6 +19,7 @@ uint32_t round_to_intervals_of_nanoseconds = 50000;
 double max_scan_duration = 0.5;
 uint32_t max_scan_columns = expected_number_of_pcl_columns;
 bool skip_invalid = false;
+double runtime_warn_threshold_ms = 80;
 
 
 void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
@@ -145,7 +146,7 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
     auto end = std::chrono::steady_clock::now();
     const auto cb_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    if (cb_time_ms > 50)
+    if (cb_time_ms > runtime_warn_threshold_ms)
     {
       const auto tf_time = std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count();
       ROS_WARN_STREAM_THROTTLE(1.0, "Elapsed callback time in milliseconds : " << cb_time_ms << " ms. ");
@@ -172,6 +173,7 @@ void PointCloud2Deskew::onInit()
     
     time_field_name = pnh.param("time_field_name", time_field_name);
     fixed_frame_for_laser = pnh.param("fixed_frame_for_laser", fixed_frame_for_laser);
+    runtime_warn_threshold_ms = pnh.param("runtime_warn_threshold_ms", runtime_warn_threshold_ms);
     
     // Create a ROS publisher for the output point cloud
     pub = nh.advertise<sensor_msgs::PointCloud2> ("output_point_cloud", 20);
