@@ -12,12 +12,13 @@ PLUGINLIB_EXPORT_CLASS(PointCloud2Deskew, nodelet::Nodelet);
 ros::Publisher pub;
 ros::Subscriber sub;
 boost::shared_ptr<tf::TransformListener> tf_ptr;
-std::string fixed_frame_for_laser = "odom";  //TODO: Load as a parameter
+std::string fixed_frame_for_laser = "odom";
 std::string time_field_name = "t";
 uint32_t expected_number_of_pcl_columns = 4000;
 uint32_t round_to_intervals_of_nanoseconds = 50000;
 double max_scan_duration = 0.5;
 uint32_t max_scan_columns = expected_number_of_pcl_columns;
+bool skip_invalid = false;
 
 
 void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
@@ -33,8 +34,22 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     output = *input;
 
     // Iterators over the pointcloud2 message
-    // TODO: Check that there actually is a "t" in the message!!! (try/catch)
-    sensor_msgs::PointCloud2Iterator<uint32_t> iter_t(output, time_field_name);
+    std::unique_ptr<sensor_msgs::PointCloud2Iterator<uint32_t>> iter_ptr;
+    try
+    {
+      iter_ptr = std::make_unique<sensor_msgs::PointCloud2Iterator<uint32_t>>(output, time_field_name);
+    }
+    catch (std::runtime_error& e)
+    {
+        ROS_ERROR_STREAM_THROTTLE(1.0,"Could not find field " << time_field_name << " in the pointcloud. "
+          << (skip_invalid ? "Skipping the cloud." : "Publishing it as skewed.")
+          << " The error was: " << e.what());
+        if (!skip_invalid)
+          pub.publish(input);
+        return;
+    }
+    
+    auto& iter_t = *iter_ptr;
 
     uint32_t latest_time = 0;
     uint32_t current_point_time = 0;
@@ -71,8 +86,10 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     {
       ROS_ERROR_STREAM("Bad data. Time range of the pointcloud is "
         << (latest_time * 1e-9) << " s, which is too much (allowed max is "
-        << max_scan_duration << " s). Publishing skewed pointcloud.");
-      pub.publish(input);
+        << max_scan_duration << " s). "
+        << (skip_invalid ? "Skipping cloud." : "Publishing skewed cloud"));
+      if (!skip_invalid)
+        pub.publish(input);
       return;
     }
     
@@ -148,9 +165,24 @@ void PointCloud2Deskew::onInit()
     max_scan_duration = pnh.param("max_scan_duration", max_scan_duration);
     max_scan_columns = static_cast<uint32_t>(1e9 * max_scan_duration / round_to_intervals_of_nanoseconds);
     
+    skip_invalid = pnh.param("skip_invalid", skip_invalid);
+    
+    round_to_intervals_of_nanoseconds = pnh.param(
+      "round_to_intervals_of_nanoseconds", static_cast<int>(round_to_intervals_of_nanoseconds));
+    
+    time_field_name = pnh.param("time_field_name", time_field_name);
+    fixed_frame_for_laser = pnh.param("fixed_frame_for_laser", fixed_frame_for_laser);
+    
     // Create a ROS publisher for the output point cloud
     pub = nh.advertise<sensor_msgs::PointCloud2> ("output_point_cloud", 20);
 
     // Create a ROS subscriber for the input point cloud
     sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);
+    
+    ROS_INFO("Started pointcloud deskew node. TFs are rounded to %u ns, corrections are done in %s frame. "
+             "Timestamps are read from field '%s'. "
+             "Scans with timestamp range larger than %3.3f s are %s.",
+             round_to_intervals_of_nanoseconds, fixed_frame_for_laser.c_str(),
+             time_field_name.c_str(), max_scan_duration,
+             (skip_invalid ? "skippped" : "published skewed"));
 }
