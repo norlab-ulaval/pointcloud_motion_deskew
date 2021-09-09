@@ -10,18 +10,22 @@
 PLUGINLIB_EXPORT_CLASS(PointCloud2Deskew, nodelet::Nodelet);
 
 ros::Publisher pub;
+ros::Subscriber sub;
 boost::shared_ptr<tf::TransformListener> tf_ptr;
-std::string fixed_frame_for_laser = "odom";  //TODO: Load as a parameter
+std::string fixed_frame_for_laser = "odom";
 std::string time_field_name = "t";
-int expected_number_of_pcl_columns = 4000;
-int round_to_intervals_of_nanoseconds = 50000;
+uint32_t expected_number_of_pcl_columns = 4000;
+uint32_t round_to_intervals_of_nanoseconds = 50000;
+double max_scan_duration = 0.5;
+uint32_t max_scan_columns = expected_number_of_pcl_columns;
+bool skip_invalid = false;
+double runtime_warn_threshold_ms = 80;
 
 
 void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 {
 
     //Measure callback duration
-    std::cout << "Beginning processing pcl...  ";
     auto start = std::chrono::steady_clock::now();
 
     // Create a container for the data.
@@ -31,12 +35,22 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     output = *input;
 
     // Iterators over the pointcloud2 message
-    // TODO: Check that there actually is a "t" in the message!!! (try/catch)
-    sensor_msgs::PointCloud2Iterator<uint32_t> iter_t(output, time_field_name);
-
-    // Dictionary to store transforms already looked up
-    std::unordered_map<uint32_t, tf::StampedTransform> tfs_cache;
-    tfs_cache.reserve(expected_number_of_pcl_columns);
+    std::unique_ptr<sensor_msgs::PointCloud2Iterator<uint32_t>> iter_ptr;
+    try
+    {
+      iter_ptr = std::make_unique<sensor_msgs::PointCloud2Iterator<uint32_t>>(output, time_field_name);
+    }
+    catch (std::runtime_error& e)
+    {
+        ROS_ERROR_STREAM_THROTTLE(1.0,"Could not find field " << time_field_name << " in the pointcloud. "
+          << (skip_invalid ? "Skipping the cloud." : "Publishing it as skewed.")
+          << " The error was: " << e.what());
+        if (!skip_invalid)
+          pub.publish(input);
+        return;
+    }
+    
+    auto& iter_t = *iter_ptr;
 
     uint32_t latest_time = 0;
     uint32_t current_point_time = 0;
@@ -64,6 +78,23 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     }
 
     auto after_waitForTransform = std::chrono::steady_clock::now();
+
+    // Dictionary to store transforms already looked up
+    std::unordered_map<uint32_t, tf::StampedTransform> tfs_cache;
+    expected_number_of_pcl_columns = latest_time / round_to_intervals_of_nanoseconds;
+    
+    if (expected_number_of_pcl_columns > max_scan_columns)
+    {
+      ROS_ERROR_STREAM("Bad data. Time range of the pointcloud is "
+        << (latest_time * 1e-9) << " s, which is too much (allowed max is "
+        << max_scan_duration << " s). "
+        << (skip_invalid ? "Skipping cloud." : "Publishing skewed cloud"));
+      if (!skip_invalid)
+        pub.publish(input);
+      return;
+    }
+    
+    tfs_cache.reserve(expected_number_of_pcl_columns);
 
     //reset the iterators
     iter_t = sensor_msgs::PointCloud2Iterator<uint32_t>(output, time_field_name);
@@ -114,30 +145,46 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
 
     auto end = std::chrono::steady_clock::now();
-    std::cout << "... done." << std::endl;
-    std::cout << "Elapsed callback time in milliseconds : "
-         << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-         << " ms. ";
-    std::cout << "Elapsed callback time in waiting for transform: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
-              << " ms." << std::endl;
-    std::cout << "Number of tf's fetched: " << tfs_cache.size() << std::endl;
-
+    const auto cb_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    if (cb_time_ms > runtime_warn_threshold_ms)
+    {
+      const auto tf_time = std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count();
+      ROS_WARN_STREAM_THROTTLE(1.0, "Elapsed callback time in milliseconds : " << cb_time_ms << " ms. ");
+      ROS_WARN_STREAM_THROTTLE(1.0, "Elapsed callback time in waiting for transform: " << tf_time << " ms.");
+      ROS_WARN_STREAM_THROTTLE(1.0, "Number of tf's fetched: " << tfs_cache.size());
+    }
 }
 
 void PointCloud2Deskew::onInit()
 {
-    ros::NodeHandle nh;
-
-    // Create a ROS subscriber for the input point cloud
-    ros::Subscriber sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);
+    ros::NodeHandle nh = this->getNodeHandle();
+    ros::NodeHandle pnh = this->getPrivateNodeHandle();
 
     // Create a transform listener
     tf_ptr.reset(new tf::TransformListener);
 
+    max_scan_duration = pnh.param("max_scan_duration", max_scan_duration);
+    max_scan_columns = static_cast<uint32_t>(1e9 * max_scan_duration / round_to_intervals_of_nanoseconds);
+    
+    skip_invalid = pnh.param("skip_invalid", skip_invalid);
+    
+    round_to_intervals_of_nanoseconds = pnh.param(
+      "round_to_intervals_of_nanoseconds", static_cast<int>(round_to_intervals_of_nanoseconds));
+    
+    time_field_name = pnh.param("time_field_name", time_field_name);
+    fixed_frame_for_laser = pnh.param("fixed_frame_for_laser", fixed_frame_for_laser);
+    runtime_warn_threshold_ms = pnh.param("runtime_warn_threshold_ms", runtime_warn_threshold_ms);
+    
     // Create a ROS publisher for the output point cloud
     pub = nh.advertise<sensor_msgs::PointCloud2> ("output_point_cloud", 20);
 
-    // Spin
-    ros::spin ();
+    // Create a ROS subscriber for the input point cloud
+    sub = nh.subscribe ("input_point_cloud", 20, cloud_callback);
+    
+    ROS_INFO("Started pointcloud deskew node. TFs are rounded to %u ns, corrections are done in %s frame. "
+             "Timestamps are read from field '%s'. "
+             "Scans with timestamp range larger than %3.3f s are %s.",
+             round_to_intervals_of_nanoseconds, fixed_frame_for_laser.c_str(),
+             time_field_name.c_str(), max_scan_duration,
+             (skip_invalid ? "skippped" : "published skewed"));
 }
