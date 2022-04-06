@@ -13,6 +13,7 @@ int round_to_intervals_of_nanoseconds = 50000;
 
 void ouster_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success);
 void velodyne_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success);
+void hesai_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success);
 
 void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 {
@@ -29,6 +30,7 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
     bool is_ouster_like = false;     // time field called "t", time positive nanoseconds in a uint32
     bool is_velodyne_like = false;     // time field called "time", time negative seconds in a float
+    bool is_hesai_like = false;     // time field called "time", time negative seconds in a float
 
     // Detect what kind of time information we have for the points
     for (sensor_msgs::PointField field : output.fields)
@@ -45,18 +47,25 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
             std::cout << "Pointcloud is the Velodyne type." << std::endl;
             break;
         }
+        if(field.name == "timestamp" && field.datatype == 8)   // 8 is float 64
+        {
+            is_hesai_like = true;
+            std::cout << "Pointcloud Hilti is the Hesai type." << std::endl;
+            break;
+        }
 
     }
 
-    if( !(is_ouster_like || is_velodyne_like))
+    if( !(is_ouster_like || is_velodyne_like || is_hesai_like))
     {
-        ROS_WARN("The input point cloud does not contain 'time' or 't' field. Skipping.");
+        ROS_WARN("The input point cloud does not contain 'time' or 't' or 'timestamp' field. Skipping.");
         return;
     }
 
     bool success = true;
     if (is_ouster_like) ouster_cloud_deskew(output, success);
     if (is_velodyne_like) velodyne_cloud_deskew(output, success);
+    if (is_hesai_like) hesai_cloud_deskew(output, success);
 
     //Publish the data.
     if(success)
@@ -241,6 +250,92 @@ void velodyne_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success)
         else // we already have that transform from a previous point
         {
             transform = tfs_cache[current_point_time];
+        }
+
+        //transform the point
+        tf::Vector3 transformed_point = transform * tf::Vector3(iter_xyz[0], iter_xyz[1], iter_xyz[2]);
+        iter_xyz[0] = transformed_point.x();
+        iter_xyz[1] = transformed_point.y();
+        iter_xyz[2] = transformed_point.z();
+
+    }
+
+    std::cout << "Elapsed callback time in waiting for transform: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
+              << " ms." << std::endl;
+    std::cout << "Number of tf's fetched: " << tfs_cache.size() << std::endl;
+}
+
+void hesai_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success)
+{
+    std::string time_field_name = "timestamp";
+    auto start = std::chrono::steady_clock::now();
+
+    // Iterators over the pointcloud2 message
+    sensor_msgs::PointCloud2Iterator<double> iter_t(output, time_field_name);
+
+    // Dictionary to store transforms already looked up
+    std::unordered_map<int64_t, tf::StampedTransform> tfs_cache; 
+    tfs_cache.reserve(expected_number_of_pcl_columns);
+
+    double latest_time = 0;
+    int64_t current_point_time = 0;
+
+    // Find the latest time
+    for (; iter_t != iter_t.end(); ++iter_t)
+    {
+        if(*iter_t>latest_time) latest_time=*iter_t;
+    }
+
+    //wait for the latest transform
+    ros::Time last_laser_beam_time(latest_time);
+    try{
+        tf_ptr->waitForTransform (output.header.frame_id,
+                                  output.header.stamp,
+                                  output.header.frame_id,
+                                  last_laser_beam_time,
+                                  fixed_frame_for_laser,
+                                  ros::Duration(0.25));
+
+    }
+    catch (tf::TransformException &ex){
+        ROS_ERROR("Pointcloud callback failed because: %s",ex.what());
+        success = false;
+        return;
+    }
+
+    auto after_waitForTransform = std::chrono::steady_clock::now();
+
+    //reset the iterators
+    iter_t = sensor_msgs::PointCloud2Iterator<double>(output, time_field_name);
+    sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");    // xyz are consecutive, y~iter_xzy[1], z~[2]
+
+    // iterate over the pointcloud, lookup tfs and apply them
+    for (; iter_t != iter_t.end(); ++iter_t, ++iter_xyz)
+    {
+        tf::StampedTransform transform;
+        if(tfs_cache.count(*iter_t) == 0) // we haven't looked for the transform for that time yet
+        {
+            ros::Time laser_beam_time(*iter_t);
+            try{
+                tf_ptr->lookupTransform (output.header.frame_id,
+                                         output.header.stamp,
+                                         output.header.frame_id,
+                                         laser_beam_time,
+                                         fixed_frame_for_laser,
+                                         transform);
+            }
+            catch (tf::TransformException ex){
+                ROS_ERROR("Pointcloud callback failed because: %s",ex.what());
+                success = false;
+                return;
+            }
+
+            tfs_cache[current_point_time] = transform;
+        }
+        else // we already have that transform from a previous point
+        {
+            transform = tfs_cache[*iter_t];
         }
 
         //transform the point
