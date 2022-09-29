@@ -1,0 +1,5 @@
+<launch>
+  <node  pkg="pcl_deskew_node" exec="pointcloud2_deskew" name="pointcloud2_deskew_node" output="screen" >
+    <remap from="input_point_cloud" to="rslidar32_points_stamped" />
+  </node>
+</launch>
