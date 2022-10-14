@@ -1,5 +1,7 @@
 <launch>
-  <node  pkg="pcl_deskew_node" exec="pointcloud2_deskew" name="pointcloud2_deskew_node" output="screen" >
-    <remap from="input_point_cloud" to="rslidar32_points_stamped" />
+  <set_parameter name="use_sim_time" value="true"/>
+  <node  pkg="pointcloud_motion_deskew" exec="pointcloud2_deskew_node" name="pointcloud2_deskew_node" output="screen" >
+    <remap from="input_point_cloud" to="/rslidar32_points" />
+    <remap from="output_point_cloud" to="/rslidar32_points_deskewed" />
   </node>
 </launch>
