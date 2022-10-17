@@ -57,17 +57,14 @@ private:
             if(field.name == "t" && field.datatype == 6)
             {
                 is_ouster_like = true;
-                std::cout << "PointCloud is the Ouster type." << std::endl;
             }
             else if(field.name == "time" && field.datatype == 7)
             {
                 is_velodyne_like = true;
-                std::cout << "PointCloud is the Velodyne type." << std::endl;
             }
             else if(field.name == "timestamp" && field.datatype == 8)
             {
                 is_hesai_like = true;
-                std::cout << "PointCloud is the Hesai type (Hilti)." << std::endl;
             }
         }
 
