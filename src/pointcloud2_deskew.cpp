@@ -115,13 +115,17 @@ private:
         //iterate over the pointcloud, lookup tfs and apply them
         for (;iter_t != iter_t.end(); ++iter_t, ++iter_xyz)
         {
+            // RCLCPP_INFO(this->get_logger(), "timestamp iter_t: %d", *iter_t);
             current_point_time = (*iter_t/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds;
+            // RCLCPP_INFO(this->get_logger(), "timestamp current_point: %d", current_point_time);
             geometry_msgs::msg::TransformStamped transform;
             tf2::Stamped<tf2::Transform> stampedTransform;
 
             if(tfs_cache.count(current_point_time) == 0)
             {
                 rclcpp::Time laser_beam_time = rclcpp::Time(output.header.stamp) + rclcpp::Duration(0, current_point_time);
+                
+                // RCLCPP_INFO(this->get_logger(), "timestamp laser: %d", *iter_t);
                 try{
                     transform = tfBuffer->lookupTransform(output.header.frame_id,
                                                           output.header.stamp,
