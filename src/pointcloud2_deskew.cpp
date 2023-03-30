@@ -162,14 +162,14 @@ private:
         auto start = std::chrono::steady_clock::now();
         
         // Iterators over the pointcloud2 message
-        sensor_msgs::PointCloud2Iterator<uint32_t> iter_t(output, time_field_name);
+        sensor_msgs::PointCloud2Iterator<float> iter_t(output, time_field_name);
 
         // Dictionary to store transforms already looked up
         std::unordered_map<int32_t, geometry_msgs::msg::TransformStamped> tfs_cache;
         tfs_cache.reserve(expected_number_of_pcl_columns);
 
         uint32_t latest_time = 0;
-        uint32_t current_point_time = 0;
+        int32_t current_point_time = 0;
 
         // Find the latest time
         for (;iter_t != iter_t.end(); ++iter_t)
@@ -177,20 +177,25 @@ private:
             if(*iter_t>latest_time) latest_time=*iter_t;
         }
         //reset the iterators
-        iter_t = sensor_msgs::PointCloud2Iterator<uint32_t>(output, time_field_name);
+        iter_t = sensor_msgs::PointCloud2Iterator<float>(output, time_field_name);
         sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");   // xyz are consecutive, y~iter_xzy[1], z~[2]
 
         //iterate over the pointcloud, lookup tfs and apply them
         for (;iter_t != iter_t.end(); ++iter_t, ++iter_xyz)
         {
-            current_point_time = (int32_t)(*iter_t * 1000000000);
+            current_point_time = (int32_t)(*iter_t * 1000000000); //convert to nanoseconds integer
             current_point_time = (current_point_time/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds;
-            
+
             geometry_msgs::msg::TransformStamped transform;
             tf2::Stamped<tf2::Transform> stampedTransform;
             if(tfs_cache.count(current_point_time) == 0)
             {
-                rclcpp::Time laser_beam_time = rclcpp::Time(output.header.stamp) + rclcpp::Duration(0, current_point_time);
+                rclcpp::Time laser_beam_time = rclcpp::Time(output.header.stamp);
+                if (current_point_time < 0) {
+                    laser_beam_time -= rclcpp::Duration(0, std::abs(current_point_time));
+                } else {
+                    laser_beam_time += rclcpp::Duration(0, current_point_time);
+                }
                 try{
                     transform = tfBuffer->lookupTransform(output.header.frame_id,
                                                           output.header.stamp,
