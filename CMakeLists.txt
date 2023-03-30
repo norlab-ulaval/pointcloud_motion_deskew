@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(pointcloud_motion_deskew)
 
+set(CMAKE_BUILD_TYPE "Release")
+
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
