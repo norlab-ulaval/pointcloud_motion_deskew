@@ -1,5 +1,4 @@
 <launch>
-  <set_parameter name="use_sim_time" value="true"/>
   <node  pkg="pointcloud_motion_deskew" exec="pointcloud2_deskew_node" name="pointcloud2_deskew_node" output="screen" >
     <remap from="input_point_cloud" to="/lslidar_point_cloud" />
     <remap from="output_point_cloud" to="/lslidar_point_cloud_deskewed" />
