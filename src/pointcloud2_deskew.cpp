@@ -60,6 +60,19 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     {
         if(*iter_t>latest_time) latest_time=*iter_t;
     }
+    
+    expected_number_of_pcl_columns = latest_time / round_to_intervals_of_nanoseconds;
+    
+    if (expected_number_of_pcl_columns > max_scan_columns)
+    {
+      ROS_ERROR_STREAM("Bad data. Time range of the pointcloud is "
+        << (latest_time * 1e-9) << " s, which is too much (allowed max is "
+        << max_scan_duration << " s). "
+        << (skip_invalid ? "Skipping cloud." : "Publishing skewed cloud"));
+      if (!skip_invalid)
+        pub.publish(input);
+      return;
+    }
 
     //wait for the latest transform
     ros::Time last_laser_beam_time = output.header.stamp + ros::Duration(0, latest_time);
@@ -81,19 +94,6 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 
     // Dictionary to store transforms already looked up
     std::unordered_map<uint32_t, tf::StampedTransform> tfs_cache;
-    expected_number_of_pcl_columns = latest_time / round_to_intervals_of_nanoseconds;
-    
-    if (expected_number_of_pcl_columns > max_scan_columns)
-    {
-      ROS_ERROR_STREAM("Bad data. Time range of the pointcloud is "
-        << (latest_time * 1e-9) << " s, which is too much (allowed max is "
-        << max_scan_duration << " s). "
-        << (skip_invalid ? "Skipping cloud." : "Publishing skewed cloud"));
-      if (!skip_invalid)
-        pub.publish(input);
-      return;
-    }
-    
     tfs_cache.reserve(expected_number_of_pcl_columns);
 
     //reset the iterators
