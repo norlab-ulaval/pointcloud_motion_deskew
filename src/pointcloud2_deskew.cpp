@@ -103,11 +103,14 @@ private:
         uint32_t latest_time = 0;
         uint32_t current_point_time = 0;
 
+        rclcpp::Time cloud_start_time(output.header.stamp);
         // Find the latest time
         for (;iter_t != iter_t.end(); ++iter_t)
         {
             if(*iter_t>latest_time) latest_time=*iter_t;
         }
+        output.header.stamp = cloud_start_time + rclcpp::Duration(0, (latest_time/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds);
+
         //reset the iterators
         iter_t = sensor_msgs::PointCloud2Iterator<uint32_t>(output, time_field_name);
         sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");   // xyz are consecutive, y~iter_xzy[1], z~[2]
@@ -123,7 +126,7 @@ private:
 
             if(tfs_cache.count(current_point_time) == 0)
             {
-                rclcpp::Time laser_beam_time = rclcpp::Time(output.header.stamp) + rclcpp::Duration(0, current_point_time);
+                rclcpp::Time laser_beam_time = cloud_start_time + rclcpp::Duration(0, current_point_time);
                 
                 // RCLCPP_INFO(this->get_logger(), "timestamp laser: %d", *iter_t);
                 try{
@@ -171,11 +174,14 @@ private:
         uint32_t latest_time = 0;
         int32_t current_point_time = 0;
 
+        rclcpp::Time cloud_start_time(output.header.stamp);
         // Find the latest time
         for (;iter_t != iter_t.end(); ++iter_t)
         {
             if(*iter_t>latest_time) latest_time=*iter_t;
         }
+        output.header.stamp = cloud_start_time + rclcpp::Duration(0, ((int32_t)(latest_time * 1000000000)/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds);
+
         //reset the iterators
         iter_t = sensor_msgs::PointCloud2Iterator<float>(output, time_field_name);
         sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");   // xyz are consecutive, y~iter_xzy[1], z~[2]
@@ -190,7 +196,7 @@ private:
             tf2::Stamped<tf2::Transform> stampedTransform;
             if(tfs_cache.count(current_point_time) == 0)
             {
-                rclcpp::Time laser_beam_time = rclcpp::Time(output.header.stamp);
+                rclcpp::Time laser_beam_time = cloud_start_time;
                 if (current_point_time < 0) {
                     laser_beam_time -= rclcpp::Duration(0, std::abs(current_point_time));
                 } else {
@@ -241,11 +247,14 @@ private:
         double latest_time = 0;
         int64_t current_point_time = 0;
 
+        rclcpp::Time cloud_start_time(output.header.stamp);
         // Find the latest time
         for (;iter_t != iter_t.end(); ++iter_t)
         {
             if(*iter_t>latest_time) latest_time=*iter_t;
         }
+        output.header.stamp = cloud_start_time + rclcpp::Duration(0, (latest_time/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds);
+
         //reset the iterators
         iter_t = sensor_msgs::PointCloud2Iterator<double>(output, time_field_name);
         sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");   // xyz are consecutive, y~iter_xzy[1], z~[2]
@@ -259,7 +268,7 @@ private:
             tf2::Stamped<tf2::Transform> stampedTransform;
             if(tfs_cache.count(current_point_time) == 0)
             {
-                rclcpp::Time laser_beam_time = rclcpp::Time(output.header.stamp) + rclcpp::Duration(0, current_point_time);
+                rclcpp::Time laser_beam_time = cloud_start_time + rclcpp::Duration(0, current_point_time);
                 try{
                     transform = tfBuffer->lookupTransform(output.header.frame_id,
                                                           output.header.stamp,
