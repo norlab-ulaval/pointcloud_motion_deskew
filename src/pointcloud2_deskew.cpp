@@ -19,7 +19,6 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
 {
 
     //Measure callback duration
-    std::cout << "Beginning processing pcl...  ";
     auto start = std::chrono::steady_clock::now();
 
     // Create a container for the data.
@@ -38,19 +37,19 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
         if(field.name == "t" && field.datatype == 6)    // 6 is uint32
         {
             is_ouster_like = true;
-            std::cout << "Pointcloud is the Ouster type." << std::endl;
+            ROS_DEBUG_STREAM("Pointcloud is the Ouster type.");
             break;
         }
         if(field.name == "time" && field.datatype == 7)   // 7 is float 32
         {
             is_velodyne_like = true;
-            std::cout << "Pointcloud is the Velodyne type." << std::endl;
+            ROS_DEBUG_STREAM("Pointcloud is the Velodyne type.");
             break;
         }
         if(field.name == "timestamp" && field.datatype == 8)   // 8 is float 64
         {
             is_hesai_like = true;
-            std::cout << "Pointcloud Hilti is the Hesai type." << std::endl;
+            ROS_DEBUG_STREAM("Pointcloud Hilti is the Hesai type.");
             break;
         }
 
@@ -78,10 +77,9 @@ void cloud_callback (const sensor_msgs::PointCloud2ConstPtr& input)
     }
 
     auto end = std::chrono::steady_clock::now();
-    std::cout << "... done." << std::endl;
-    std::cout << "Elapsed callback time in milliseconds : "
-         << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-         << " ms. " << std::endl;
+    ROS_DEBUG_STREAM("Elapsed callback time in milliseconds : "
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
+                     << " ms. ");
 }
 
 // deskewing ouster-like sensors
@@ -169,10 +167,9 @@ void ouster_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success)
 
     }
 
-    std::cout << "Elapsed callback time in waiting for transform: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
-              << " ms." << std::endl;
-    std::cout << "Number of tf's fetched: " << tfs_cache.size() << std::endl;
+    ROS_DEBUG_STREAM("Elapsed callback time in waiting for transform: "
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
+                     << " ms. Number of tf's fetched: " << tfs_cache.size());
 }
 
 void velodyne_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success)
@@ -260,10 +257,9 @@ void velodyne_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success)
 
     }
 
-    std::cout << "Elapsed callback time in waiting for transform: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
-              << " ms." << std::endl;
-    std::cout << "Number of tf's fetched: " << tfs_cache.size() << std::endl;
+    ROS_DEBUG_STREAM("Elapsed callback time in waiting for transform: "
+                       << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
+                       << " ms. Number of tf's fetched: " << tfs_cache.size());
 }
 
 void hesai_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success)
@@ -346,10 +342,9 @@ void hesai_cloud_deskew(sensor_msgs::PointCloud2 &output, bool &success)
 
     }
 
-    std::cout << "Elapsed callback time in waiting for transform: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
-              << " ms." << std::endl;
-    std::cout << "Number of tf's fetched: " << tfs_cache.size() << std::endl;
+    ROS_DEBUG_STREAM("Elapsed callback time in waiting for transform: "
+                     << std::chrono::duration_cast<std::chrono::milliseconds>(after_waitForTransform - start).count()
+                     << " ms. Number of tf's fetched: " << tfs_cache.size());
 }
 
 
