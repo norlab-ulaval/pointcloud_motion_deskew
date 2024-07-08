@@ -180,7 +180,7 @@ private:
         {
             if(*iter_t>latest_time) latest_time=*iter_t;
         }
-        output.header.stamp = cloud_start_time + rclcpp::Duration(0, ((int32_t)(latest_time * 1000000000)/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds);
+        output.header.stamp = cloud_start_time + rclcpp::Duration(0, ((int32_t)(latest_time * 1e9)/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds);
 
         //reset the iterators
         iter_t = sensor_msgs::PointCloud2Iterator<float>(output, time_field_name);
@@ -189,7 +189,7 @@ private:
         //iterate over the pointcloud, lookup tfs and apply them
         for (;iter_t != iter_t.end(); ++iter_t, ++iter_xyz)
         {
-            current_point_time = (int32_t)(*iter_t * 1000000000); //convert to nanoseconds integer
+            current_point_time = (int32_t)(*iter_t * 1e9); //convert to nanoseconds integer
             current_point_time = (current_point_time/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds;
 
             geometry_msgs::msg::TransformStamped transform;
