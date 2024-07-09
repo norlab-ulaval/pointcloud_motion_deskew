@@ -41,6 +41,7 @@ private:
     
     void cloud_callback (const sensor_msgs::msg::PointCloud2 &input)
     {
+    	std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         // Create a container for the data.
         sensor_msgs::msg::PointCloud2 output;
 
@@ -56,7 +57,7 @@ private:
         {
             if(field.name == "t" && field.datatype == 6)
             {
-                is_ouster_like = true;
+                is_ouster_like = true; // RS32 is ouster like
             }
             else if(field.name == "time" && field.datatype == 7)
             {
@@ -64,7 +65,7 @@ private:
             }
             else if(field.name == "timestamp" && field.datatype == 8)
             {
-                is_hesai_like = true;
+                is_hesai_like = true; // RS128 is hesai like
             }
         }
 
@@ -78,7 +79,9 @@ private:
         if(is_ouster_like) ouster_cloud_deskew(output, success);
         if(is_velodyne_like) velodyne_cloud_deskew(output, success);
         if(is_hesai_like) hesai_cloud_deskew(output, success);
-
+		std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        RCLCPP_DEBUG_STREAM(this->get_logger(), "Point cloud deskewed in " << std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count() << " [µs]");
+    
         if(success)
         {
             pub->publish(output);
@@ -244,31 +247,46 @@ private:
         std::unordered_map<int64_t, geometry_msgs::msg::TransformStamped> tfs_cache;
         tfs_cache.reserve(expected_number_of_pcl_columns);
 
+        double earliest_time = std::numeric_limits<double>::max();
         double latest_time = 0;
-        int64_t current_point_time = 0;
+        int64_t cached_tf_time = 0;
 
         rclcpp::Time cloud_start_time(output.header.stamp);
         // Find the latest time
+        // The value in the iter_t field is in seconds
         for (;iter_t != iter_t.end(); ++iter_t)
         {
-            if(*iter_t>latest_time) latest_time=*iter_t;
+            if (*iter_t<earliest_time)
+            {
+                earliest_time = *iter_t;
+            }
+            if(*iter_t>latest_time)
+                latest_time=*iter_t;
         }
-        output.header.stamp = cloud_start_time + rclcpp::Duration(0, (latest_time/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds);
+
+        latest_time -= earliest_time;
+        output.header.stamp = cloud_start_time + rclcpp::Duration(0, int64_t (latest_time*1e9));
 
         //reset the iterators
         iter_t = sensor_msgs::PointCloud2Iterator<double>(output, time_field_name);
         sensor_msgs::PointCloud2Iterator<float> iter_xyz(output, "x");   // xyz are consecutive, y~iter_xzy[1], z~[2]
 
         //iterate over the pointcloud, lookup tfs and apply them
+        double current_point_time_since_earliest_point = 0;
+        int64_t current_point_time_since_earliest_point_ns;
         for (;iter_t != iter_t.end(); ++iter_t, ++iter_xyz)
         {
-            current_point_time = (*iter_t/round_to_intervals_of_nanoseconds)*round_to_intervals_of_nanoseconds;
+            current_point_time_since_earliest_point = *iter_t - earliest_time;
+            current_point_time_since_earliest_point_ns = current_point_time_since_earliest_point * 1e9;
+
+            cached_tf_time = current_point_time_since_earliest_point_ns / round_to_intervals_of_nanoseconds;
             
             geometry_msgs::msg::TransformStamped transform;
             tf2::Stamped<tf2::Transform> stampedTransform;
-            if(tfs_cache.count(current_point_time) == 0)
+            if(tfs_cache.count(cached_tf_time) == 0)
             {
-                rclcpp::Time laser_beam_time = cloud_start_time + rclcpp::Duration(0, current_point_time);
+                rclcpp::Time laser_beam_time = cloud_start_time + rclcpp::Duration(0, current_point_time_since_earliest_point_ns);
+
                 try{
                     transform = tfBuffer->lookupTransform(output.header.frame_id,
                                                           output.header.stamp,
@@ -282,11 +300,11 @@ private:
                     success = false;
                     return;
                 }
-                tfs_cache[current_point_time] = transform;
+                tfs_cache[cached_tf_time] = transform;
             }
             else
             {
-                transform = tfs_cache[current_point_time];
+                transform = tfs_cache[cached_tf_time];
             }
 
             // transform the point
