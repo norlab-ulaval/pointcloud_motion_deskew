@@ -250,7 +250,6 @@ private:
         double earliest_time = std::numeric_limits<double>::max();
         double latest_time = 0;
         int64_t cached_tf_time = 0;
-        int64_t lookup_time_sum = 0;
 
         rclcpp::Time cloud_start_time(output.header.stamp);
         // Find the latest time
