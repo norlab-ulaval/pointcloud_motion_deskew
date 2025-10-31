@@ -18,10 +18,12 @@ public:
         this->declare_parameter<std::string>("fixed_frame_for_lidar", "odom");
         this->declare_parameter<int>("expected_pointcloud_columns", 4000);
         this->declare_parameter<int>("round_to_n_nanoseconds", 50000);
+        this->declare_parameter<bool>("input_msg_stamp_of_the_last_point", false); // used for the velody-like sensors, because of LSlidar
 
         this->get_parameter("fixed_frame_for_lidar", fixed_frame_for_laser);
         this->get_parameter("expected_pointcloud_columns", expected_number_of_pcl_columns);
         this->get_parameter("round_to_n_nanoseconds", round_to_intervals_of_nanoseconds);
+        this->get_parameter("input_msg_stamp_of_the_last_point", input_msg_stamp_of_the_last_point);
 
         pub = this->create_publisher<sensor_msgs::msg::PointCloud2>("output_point_cloud", 20);
         sub = this->create_subscription<sensor_msgs::msg::PointCloud2>("input_point_cloud", 20, std::bind(&PointcloudDeskewNode::cloud_callback, this, std::placeholders::_1));
@@ -37,6 +39,7 @@ private:
     std::string fixed_frame_for_laser = "odom";
     int expected_number_of_pcl_columns = 4000;
     int round_to_intervals_of_nanoseconds = 50000;
+    bool input_msg_stamp_of_the_last_point = false;
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub;
@@ -179,13 +182,19 @@ private:
         double latest_time = 0;
         int32_t current_point_time = 0;
 
-        rclcpp::Time cloud_start_time(output.header.stamp);
         // Find the latest time
         for (;iter_t != iter_t.end(); ++iter_t)
         {
             if( (*iter_t) > latest_time) latest_time=*iter_t;
         }
-        output.header.stamp = cloud_start_time + rclcpp::Duration(0, static_cast<int32_t>(latest_time * 1e9));
+
+        rclcpp::Time cloud_start_time;
+        if (!input_msg_stamp_of_the_last_point) {
+            cloud_start_time = rclcpp::Time(output.header.stamp);
+            output.header.stamp = cloud_start_time + rclcpp::Duration(0, static_cast<int32_t>(latest_time * 1e9));
+        }else {
+            cloud_start_time = output.header.stamp - rclcpp::Duration(0, static_cast<int32_t>(latest_time * 1e9));
+        }
 
         //reset the iterators
         iter_t = sensor_msgs::PointCloud2Iterator<float>(output, time_field_name);
